@@ -18,6 +18,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -111,6 +112,7 @@ func CalcGasLimit(parentGasLimit, desiredLimit uint64) uint64 {
 	if desiredLimit < params.MinGasLimit {
 		desiredLimit = params.MinGasLimit
 	}
+	log.Info("parentGasLimit ", parentGasLimit, " delta ", delta, " limit", limit, " desiredLimit", desiredLimit)
 	// If we're outside our allowed gas range, we try to hone towards them
 	if limit < desiredLimit {
 		limit = parentGasLimit + delta
@@ -125,5 +127,6 @@ func CalcGasLimit(parentGasLimit, desiredLimit uint64) uint64 {
 			limit = desiredLimit
 		}
 	}
+	log.Info("Returning limit", limit)
 	return limit
 }
