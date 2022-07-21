@@ -112,7 +112,7 @@ func CalcGasLimit(parentGasLimit, desiredLimit uint64) uint64 {
 	if desiredLimit < params.MinGasLimit {
 		desiredLimit = params.MinGasLimit
 	}
-	log.Info("parentGasLimit ", parentGasLimit, " delta ", delta, " limit", limit, " desiredLimit", desiredLimit)
+	log.Info("Printing vars:", " parentGasLimit ", parentGasLimit, " delta ", delta, " limit", limit, " desiredLimit", desiredLimit)
 	// If we're outside our allowed gas range, we try to hone towards them
 	if limit < desiredLimit {
 		limit = parentGasLimit + delta
