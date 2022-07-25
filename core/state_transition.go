@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -217,9 +218,11 @@ func (st *StateTransition) preCheck() error {
 		// Make sure this transaction's nonce is correct.
 		stNonce := st.state.GetNonce(st.msg.From())
 		if msgNonce := st.msg.Nonce(); stNonce < msgNonce {
+			log.Info("preCheck: ErrNonceTooHigh.", "address", st.msg.From(), "txNonce", msgNonce, "stateNonce", stNonce)
 			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooHigh,
 				st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce > msgNonce {
+			log.Info("preCheck: ErrNonceTooLow.", "address", st.msg.From(), "txNonce", msgNonce, "stateNonce", stNonce)
 			return fmt.Errorf("%w: address %v, tx: %d state: %d", ErrNonceTooLow,
 				st.msg.From().Hex(), msgNonce, stNonce)
 		} else if stNonce+1 < stNonce {
