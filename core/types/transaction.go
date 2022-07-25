@@ -531,7 +531,7 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 		wrapped, err := NewTxWithMinerFee(accTxs[0], baseFee)
 		// Remove transaction if sender doesn't match from, or if wrapping fails.
 		if acc != from || err != nil {
-			log.Info("NewTransactionsByPriceAndNonce: Deleting tx. Sender doesn't match from, or if wrapping fails.", "accTxs", accTxs)
+			log.Info("NewTransactionsByPriceAndNonce: Deleting tx. Sender doesn't match from, or if wrapping fails.", "from", from)
 			delete(txs, from)
 			continue
 		}
