@@ -324,7 +324,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	// Sanitize recommit interval if the user-specified one is too short.
 	recommit := worker.config.Recommit
 	if recommit < minRecommitInterval {
-		log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
+		log.Info("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
 		recommit = minRecommitInterval
 	}
 
@@ -538,7 +538,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case interval := <-w.resubmitIntervalCh:
 			// Adjust resubmit interval explicitly by user.
 			if interval < minRecommitInterval {
-				log.Warn("Sanitizing miner recommit interval", "provided", interval, "updated", minRecommitInterval)
+				log.Info("Sanitizing miner recommit interval", "provided", interval, "updated", minRecommitInterval)
 				interval = minRecommitInterval
 			}
 			log.Info("Miner recommit interval update", "from", minRecommit, "to", interval)
@@ -554,11 +554,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				before := recommit
 				target := float64(recommit.Nanoseconds()) / adjust.ratio
 				recommit = recalcRecommit(minRecommit, recommit, target, true)
-				log.Trace("Increase miner recommit interval", "from", before, "to", recommit)
+				log.Info("Increase miner recommit interval", "from", before, "to", recommit)
 			} else {
 				before := recommit
 				recommit = recalcRecommit(minRecommit, recommit, float64(minRecommit.Nanoseconds()), false)
-				log.Trace("Decrease miner recommit interval", "from", before, "to", recommit)
+				log.Info("Decrease miner recommit interval", "from", before, "to", recommit)
 			}
 
 			if w.resubmitHook != nil {
@@ -651,6 +651,7 @@ func (w *worker) mainLoop() {
 			if !w.isRunning() && w.current != nil {
 				// If block is already full, abort
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
+					log.Info("Block already full. Continue for ", "txs", ev.Txs)
 					continue
 				}
 				txs := make(map[common.Address]types.Transactions)
@@ -742,7 +743,7 @@ func (w *worker) taskLoop() {
 			w.pendingMu.Unlock()
 
 			if err := w.engine.Seal(w.chain, task.block, task.profit, w.resultCh, stopCh); err != nil {
-				log.Warn("Block sealing failed", "err", err)
+				log.Info("Block sealing failed", "err", err)
 				w.pendingMu.Lock()
 				delete(w.pendingTasks, sealHash)
 				w.pendingMu.Unlock()
@@ -840,7 +841,7 @@ func (w *worker) makeEnv(parent *types.Block, header *types.Header, coinbase com
 		// The maximum acceptable reorg depth can be limited by the finalised block
 		// somehow. TODO(rjl493456442) fix the hard-coded number here later.
 		state, err = w.eth.StateAtBlock(parent, 1024, nil, false, false)
-		log.Warn("Recovered mining state", "root", parent.Root(), "err", err)
+		log.Info("Recovered mining state", "root", parent.Root(), "err", err)
 	}
 	if err != nil {
 		return nil, err
@@ -963,7 +964,7 @@ func (w *worker) commitBundle(env *environment, txs types.Transactions, interrup
 		// If we don't have enough gas for any further transactions discard the block
 		// since not all bundles of the were applied
 		if env.gasPool.Gas() < params.TxGas {
-			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
+			log.Info("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
 			return errCouldNotApplyTransaction
 		}
 
@@ -975,7 +976,7 @@ func (w *worker) commitBundle(env *environment, txs types.Transactions, interrup
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
 		if tx.Protected() && !w.chainConfig.IsEIP155(env.header.Number) {
-			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
+			log.Info("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
 			return errCouldNotApplyTransaction
 		}
 		// Start executing the transaction
@@ -985,17 +986,17 @@ func (w *worker) commitBundle(env *environment, txs types.Transactions, interrup
 		switch {
 		case errors.Is(err, core.ErrGasLimitReached):
 			// Pop the current out-of-gas transaction without shifting in the next from the account
-			log.Trace("Gas limit exceeded for current block", "sender", from)
+			log.Info("Gas limit exceeded for current block", "sender", from)
 			return errCouldNotApplyTransaction
 
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
-			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+			log.Info("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
 			return errCouldNotApplyTransaction
 
 		case errors.Is(err, core.ErrNonceTooHigh):
 			// Reorg notification data race between the transaction pool and miner, skip account =
-			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
+			log.Info("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
 			return errCouldNotApplyTransaction
 
 		case errors.Is(err, nil):
@@ -1006,13 +1007,13 @@ func (w *worker) commitBundle(env *environment, txs types.Transactions, interrup
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
-			log.Trace("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
+			log.Info("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
 			return errCouldNotApplyTransaction
 
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
-			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+			log.Info("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			return errCouldNotApplyTransaction
 		}
 	}
@@ -1071,7 +1072,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		}
 		// If we don't have enough gas for any further transactions then we're done
 		if env.gasPool.Gas() < params.TxGas {
-			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
+			log.Info("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
 			break
 		}
 		// Retrieve the next transaction and abort if all done
@@ -1087,7 +1088,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
 		if tx.Protected() && !w.chainConfig.IsEIP155(env.header.Number) {
-			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
+			log.Info("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
 
 			txs.Pop()
 			continue
@@ -1099,34 +1100,35 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		switch {
 		case errors.Is(err, core.ErrGasLimitReached):
 			// Pop the current out-of-gas transaction without shifting in the next from the account
-			log.Trace("Gas limit exceeded for current block", "sender", from)
+			log.Info("Gas limit exceeded for current block", "sender", from, "hash", tx.Hash())
 			txs.Pop()
 
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
-			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+			log.Info("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce(), "hash", tx.Hash())
 			txs.Shift()
 
 		case errors.Is(err, core.ErrNonceTooHigh):
 			// Reorg notification data race between the transaction pool and miner, skip account =
-			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
+			log.Info("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce(), "hash", tx.Hash())
 			txs.Pop()
 
 		case errors.Is(err, nil):
 			// Everything ok, collect the logs and shift in the next transaction from the same account
+			log.Info("commitTransactions: Everything ok for", "hash", tx.Hash())
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
 			txs.Shift()
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
-			log.Trace("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
+			log.Info("Skipping unsupported transaction type", "sender", from, "type", tx.Type(), "hash", tx.Hash())
 			txs.Pop()
 
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
-			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+			log.Info("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txs.Shift()
 		}
 	}
@@ -1235,9 +1237,9 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 					break
 				}
 				if err := w.commitUncle(env, uncle.Header()); err != nil {
-					log.Trace("Possible uncle rejected", "hash", hash, "reason", err)
+					log.Info("Possible uncle rejected", "hash", hash, "reason", err)
 				} else {
-					log.Debug("Committing new uncle to block", "hash", hash)
+					log.Info("Committing new uncle to block", "hash", hash)
 				}
 			}
 		}
@@ -1553,7 +1555,7 @@ func (w *worker) simulateBundles(env *environment, bundles []types.MevBundle, pe
 		simmed, err := w.computeBundleGas(env, bundle, state, gasPool, pendingTxs, 0)
 
 		if err != nil {
-			log.Debug("Error computing gas for a bundle", "error", err)
+			log.Info("Error computing gas for a bundle", "error", err)
 			continue
 		}
 		simulatedBundles = append(simulatedBundles, simmed)
