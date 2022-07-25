@@ -390,7 +390,7 @@ func (pool *TxPool) loop() {
 			stales := int(atomic.LoadInt64(&pool.priced.stales))
 
 			if pending != prevPending || queued != prevQueued || stales != prevStales {
-				log.Debug("Transaction pool status report", "executable", pending, "queued", queued, "stales", stales)
+				log.Info("Transaction pool status report", "executable", pending, "queued", queued, "stales", stales)
 				prevPending, prevQueued, prevStales = pending, queued, stales
 			}
 
@@ -910,7 +910,7 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction, local boo
 	// If the transaction isn't in lookup set but it's expected to be there,
 	// show the error log.
 	if pool.all.Get(hash) == nil && !addAll {
-		log.Error("Missing transaction in lookup set, please report the issue", "hash", hash)
+		log.Info("Missing transaction in lookup set, please report the issue", "hash", hash)
 	}
 	if addAll {
 		pool.all.Add(tx, local)
@@ -920,6 +920,7 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction, local boo
 	if _, exist := pool.beats[from]; !exist {
 		pool.beats[from] = time.Now()
 	}
+	log.Info("End of enqueueTx for", "hash", hash)
 	return old != nil, nil
 }
 
@@ -1375,7 +1376,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 		newNum := newHead.Number.Uint64()
 
 		if depth := uint64(math.Abs(float64(oldNum) - float64(newNum))); depth > 64 {
-			log.Debug("Skipping deep transaction reorg", "depth", depth)
+			log.Info("Skipping deep transaction reorg", "depth", depth)
 		} else {
 			// Reorg seems shallow enough to pull in all transactions into memory
 			var discarded, included types.Transactions
@@ -1395,33 +1396,33 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 					return
 				}
 				// If the reorg ended up on a lower number, it's indicative of setHead being the cause
-				log.Debug("Skipping transaction reset caused by setHead",
+				log.Info("Skipping transaction reset caused by setHead",
 					"old", oldHead.Hash(), "oldnum", oldNum, "new", newHead.Hash(), "newnum", newNum)
 				// We still need to update the current state s.th. the lost transactions can be readded by the user
 			} else {
 				for rem.NumberU64() > add.NumberU64() {
 					discarded = append(discarded, rem.Transactions()...)
 					if rem = pool.chain.GetBlock(rem.ParentHash(), rem.NumberU64()-1); rem == nil {
-						log.Error("Unrooted old chain seen by tx pool", "block", oldHead.Number, "hash", oldHead.Hash())
+						log.Info("Unrooted old chain seen by tx pool", "block", oldHead.Number, "hash", oldHead.Hash())
 						return
 					}
 				}
 				for add.NumberU64() > rem.NumberU64() {
 					included = append(included, add.Transactions()...)
 					if add = pool.chain.GetBlock(add.ParentHash(), add.NumberU64()-1); add == nil {
-						log.Error("Unrooted new chain seen by tx pool", "block", newHead.Number, "hash", newHead.Hash())
+						log.Info("Unrooted new chain seen by tx pool", "block", newHead.Number, "hash", newHead.Hash())
 						return
 					}
 				}
 				for rem.Hash() != add.Hash() {
 					discarded = append(discarded, rem.Transactions()...)
 					if rem = pool.chain.GetBlock(rem.ParentHash(), rem.NumberU64()-1); rem == nil {
-						log.Error("Unrooted old chain seen by tx pool", "block", oldHead.Number, "hash", oldHead.Hash())
+						log.Info("Unrooted old chain seen by tx pool", "block", oldHead.Number, "hash", oldHead.Hash())
 						return
 					}
 					included = append(included, add.Transactions()...)
 					if add = pool.chain.GetBlock(add.ParentHash(), add.NumberU64()-1); add == nil {
-						log.Error("Unrooted new chain seen by tx pool", "block", newHead.Number, "hash", newHead.Hash())
+						log.Info("Unrooted new chain seen by tx pool", "block", newHead.Number, "hash", newHead.Hash())
 						return
 					}
 				}
@@ -1435,7 +1436,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	}
 	statedb, err := pool.chain.StateAt(newHead.Root)
 	if err != nil {
-		log.Error("Failed to reset txpool state", "err", err)
+		log.Info("Failed to reset txpool state", "err", err)
 		return
 	}
 	pool.currentState = statedb
@@ -1443,7 +1444,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	pool.currentMaxGas = newHead.GasLimit
 
 	// Inject any transactions discarded due to reorgs
-	log.Debug("Reinjecting stale transactions", "count", len(reinject))
+	log.Info("Reinjecting stale transactions", "count", len(reinject))
 	senderCacher.recover(pool.signer, reinject)
 	pool.addTxsLocked(reinject, false)
 
@@ -1697,7 +1698,7 @@ func (pool *TxPool) demoteUnexecutables() {
 			gapped := list.Cap(0)
 			for _, tx := range gapped {
 				hash := tx.Hash()
-				log.Error("Demoting invalidated transaction", "hash", hash)
+				log.Info("Demoting invalidated transaction", "hash", hash)
 
 				// Internal shuffle shouldn't touch the lookup set.
 				pool.enqueueTx(hash, tx, false, false)
@@ -1929,7 +1930,7 @@ func (t *txLookup) Remove(hash common.Hash) {
 		tx, ok = t.remotes[hash]
 	}
 	if !ok {
-		log.Error("No transaction found to be deleted", "hash", hash)
+		log.Info("No transaction found to be deleted", "hash", hash)
 		return
 	}
 	t.slots -= numSlots(tx)
